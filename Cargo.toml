@@ -6,3 +6,19 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+# Keep only what is really used to keep binary small and compilation fast
+bevy = { version = "0.11.0", default-features = false, features = [
+  "bevy_core_pipeline",
+  "bevy_render",
+  "bevy_sprite",
+  "bevy_winit",
+  "multi-threaded",
+  # Might be used in the future
+  # "bevy_audio",
+  # "bevy_text",
+  # "bevy_ui",
+  # "default_font",
+  # "png",
+  # "webgl2",
+] }
+hexx = "0.9.2"
