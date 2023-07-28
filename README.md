@@ -2,6 +2,21 @@
 
 This is a small pet project to practice with Rust and bevy. The idia is to create a hex variant of the well-known [Minesweeper](https://en.wikipedia.org/wiki/Minesweeper_(video_game)), that would be playable online.
 
+## WASM support
+
+Setup required target and runner
+
+```sh
+rustup target install wasm32-unknown-unknown
+cargo install wasm-server-runner
+```
+
+Build & Run
+
+```sh
+cargo run --target wasm32-unknown-unknown --release
+```
+
 ## License
 
 All code in this project is dual-licensed under either:
