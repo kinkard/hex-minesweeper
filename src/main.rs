@@ -3,14 +3,18 @@
 use bevy::{
     prelude::*,
     render::{mesh::Indices, render_resource::PrimitiveTopology},
-    utils::HashMap,
+    utils::{HashMap, HashSet},
     window::PrimaryWindow,
 };
 use hexx::{shapes, Hex, HexLayout, HexOrientation, PlaneMeshBuilder};
 
+const TEXTURE_SIZE: Vec2 = Vec2::splat(16.0);
+const HEX_SIZE: Vec2 = Vec2::splat(11.0);
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
+        .add_systems(PreStartup, load_sprites)
         .add_systems(Startup, setup)
         .add_systems(Update, handle_input)
         .add_systems(Update, bevy::window::close_on_esc)
@@ -26,30 +30,62 @@ struct HexGrid {
     selected_material: Handle<ColorMaterial>,
 }
 
+#[derive(Resource)]
+struct Sprites {
+    /// Textures to display numbers. Number 1 lives under index 0 and so on.
+    numbers: [SpriteBundle; 6],
+    mine: SpriteBundle,
+    sign: SpriteBundle,
+}
+
+fn load_sprites(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let load_sprite = |path: &str| SpriteBundle {
+        texture: asset_server.load(path),
+        sprite: Sprite {
+            custom_size: Some(TEXTURE_SIZE),
+            ..default()
+        },
+        transform: Transform::from_xyz(0.0, 0.0, 1.0),
+        ..default()
+    };
+
+    commands.insert_resource(Sprites {
+        numbers: (1..=6).map(|i| format!("{i}.png")).enumerate().fold(
+            Default::default(),
+            |mut acc, (i, path)| {
+                acc[i] = load_sprite(&path);
+                acc
+            },
+        ),
+        mine: load_sprite("mine.png"),
+        sign: load_sprite("sign.png"),
+    });
+}
+
 fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    textures: Res<Sprites>,
 ) {
     commands.spawn(Camera2dBundle::default());
 
     let layout = HexLayout {
         orientation: HexOrientation::Pointy,
-        hex_size: Vec2::splat(11.0),
+        hex_size: HEX_SIZE,
         ..default()
     };
 
     // materials
-    let selected_material = materials.add(Color::RED.into());
-    let default_material = materials.add(Color::WHITE.into());
+    let selected_material = materials.add(Color::WHITE.into());
+    let default_material = materials.add(Color::GRAY.into());
 
     // mesh
     let mesh = hexagonal_plane(&layout);
     let mesh_handle = meshes.add(mesh);
 
-    let entities = shapes::hexagon(Hex::ZERO, 20)
+    let entities: HashMap<_, _> = shapes::hexagon(Hex::ZERO, 20)
         .map(|hex| {
-            println!("Hex: {hex:?}");
             let pos = layout.hex_to_world_pos(hex);
             let id = commands
                 .spawn(ColorMesh2dBundle {
@@ -62,6 +98,47 @@ fn setup(
             (hex, id)
         })
         .collect();
+
+    // Add mines
+    let mines: HashSet<_> = entities
+        .iter()
+        .enumerate()
+        // todo: add random here
+        .filter(|(index, _)| index % 4 == 0)
+        .map(|(_index, (hex, entity))| {
+            // Spawn mine
+            commands.entity(*entity).with_children(|parent| {
+                parent.spawn(textures.mine.clone());
+            });
+            hex.clone()
+        })
+        .collect();
+
+    // Count neighbor mines simply iterating over all mines and increment counter for each neigbor
+    let numbers = mines.iter().fold(
+        HashMap::with_capacity(entities.len() / 2),
+        |mut acc, hex| {
+            hex.ring(1).for_each(|hex| {
+                acc.entry(hex)
+                    // keep count-1 to as we store numbers as number-1
+                    .and_modify(|count| *count += 1)
+                    .or_insert(0);
+            });
+            acc
+        },
+    );
+
+    // Add child entities with numbers
+    numbers
+        .into_iter()
+        // we don't want to draw number over the mine
+        .filter(|(hex, _number)| !mines.contains(hex))
+        .filter_map(|(hex, number)| entities.get(&hex).map(|entity| (entity, number)))
+        .for_each(|(entity, number)| {
+            commands.entity(*entity).with_children(|parent| {
+                parent.spawn(textures.numbers[number as usize].clone());
+            });
+        });
 
     commands.insert_resource(HexGrid {
         layout,
