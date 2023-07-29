@@ -8,8 +8,9 @@ use bevy::{
 };
 use hexx::{shapes, Hex, HexLayout, HexOrientation, PlaneMeshBuilder};
 
-const TEXTURE_SIZE: Vec2 = Vec2::splat(16.0);
-const HEX_SIZE: Vec2 = Vec2::splat(11.0);
+const TEXTURE_SIZE: Vec2 = Vec2::splat(26.0);
+const HEX_SIZE: Vec2 = Vec2::splat(16.0);
+const GRID_RADIUS: u32 = 16;
 
 fn main() {
     App::new()
@@ -84,7 +85,7 @@ fn setup(
     let mesh = hexagonal_plane(&layout);
     let mesh_handle = meshes.add(mesh);
 
-    let entities: HashMap<_, _> = shapes::hexagon(Hex::ZERO, 20)
+    let entities: HashMap<_, _> = shapes::hexagon(Hex::ZERO, GRID_RADIUS)
         .map(|hex| {
             let pos = layout.hex_to_world_pos(hex);
             let id = commands
