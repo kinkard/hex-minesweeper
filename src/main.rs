@@ -150,10 +150,11 @@ fn setup(
 
 fn handle_input(
     mut commands: Commands,
-    // buttons: Res<Input<MouseButton>>,
+    buttons: Res<Input<MouseButton>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut current: Local<Hex>,
     grid: ResMut<HexGrid>,
+    textures: Res<Sprites>,
 ) {
     let window = windows.single();
     let Some(cursor_pos) = window.cursor_position() else {
@@ -168,22 +169,31 @@ fn handle_input(
 
     let hex_pos = grid.layout.world_pos_to_hex(cursor_pos);
 
+    if buttons.just_pressed(MouseButton::Right) {
+        if let Some(entity) = grid.entities.get(&hex_pos) {
+            // plase sign on right click
+            commands.entity(*entity).with_children(|parent| {
+                parent.spawn(textures.sign.clone());
+            });
+        }
+    }
+
     // Do nothing if selected hex didn't change
     if hex_pos == *current {
         return;
     }
 
-    if let Some(entity) = grid.entities.get(&*current).copied() {
+    if let Some(entity) = grid.entities.get(&*current) {
         commands
-            .entity(entity)
+            .entity(*entity)
             .insert(grid.default_material.clone());
     };
 
     *current = hex_pos;
 
-    if let Some(entity) = grid.entities.get(&*current).copied() {
+    if let Some(entity) = grid.entities.get(&*current) {
         commands
-            .entity(entity)
+            .entity(*entity)
             .insert(grid.selected_material.clone());
     };
 }
