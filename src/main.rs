@@ -120,7 +120,7 @@ fn setup(
             commands.entity(*entity).with_children(|parent| {
                 parent.spawn(textures.mine.clone());
             });
-            hex.clone()
+            *hex
         })
         .collect();
 
