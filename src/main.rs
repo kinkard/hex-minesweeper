@@ -27,6 +27,9 @@ struct HexGrid {
     layout: HexLayout,
     entities: HashMap<Hex, Entity>,
 
+    with_numbers: HashSet<Hex>,
+    with_mines: HashSet<Hex>,
+
     default_material: Handle<ColorMaterial>,
     selected_material: Handle<ColorMaterial>,
 }
@@ -105,7 +108,7 @@ fn setup(
         .iter()
         .enumerate()
         // todo: add random here
-        .filter(|(index, _)| index % 4 == 0)
+        .filter(|(index, _)| index % 8 == 0)
         .map(|(_index, (hex, entity))| {
             // Spawn mine
             commands.entity(*entity).with_children(|parent| {
@@ -130,20 +133,26 @@ fn setup(
     );
 
     // Add child entities with numbers
-    numbers
+    let numbers = numbers
         .into_iter()
         // we don't want to draw number over the mine
         .filter(|(hex, _number)| !mines.contains(hex))
-        .filter_map(|(hex, number)| entities.get(&hex).map(|entity| (entity, number)))
-        .for_each(|(entity, number)| {
+        .filter_map(|(hex, number)| entities.get(&hex).map(|entity| (hex, number, entity)))
+        .map(|(hex, number, entity)| {
             commands.entity(*entity).with_children(|parent| {
                 parent.spawn(textures.numbers[number as usize].clone());
             });
-        });
+            hex
+        })
+        .collect();
 
     commands.insert_resource(HexGrid {
         layout,
         entities,
+
+        with_numbers: numbers,
+        with_mines: mines,
+
         default_material,
         selected_material,
     });
@@ -153,7 +162,7 @@ fn handle_input(
     mut commands: Commands,
     buttons: Res<Input<MouseButton>>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut current: Local<Hex>,
+    mut prev_hex: Local<Hex>,
     grid: ResMut<HexGrid>,
     textures: Res<Sprites>,
 ) {
@@ -168,10 +177,10 @@ fn handle_input(
         window.height() / 2.0 - cursor_pos.y,
     );
 
-    let hex_pos = grid.layout.world_pos_to_hex(cursor_pos);
+    let curr_hex = grid.layout.world_pos_to_hex(cursor_pos);
 
     if buttons.just_pressed(MouseButton::Right) {
-        if let Some(entity) = grid.entities.get(&hex_pos) {
+        if let Some(entity) = grid.entities.get(&curr_hex) {
             // plase sign on right click
             commands.entity(*entity).with_children(|parent| {
                 parent.spawn(textures.sign.clone());
@@ -180,23 +189,51 @@ fn handle_input(
     }
 
     // Do nothing if selected hex didn't change
-    if hex_pos == *current {
+    if curr_hex == *prev_hex {
         return;
     }
+    *prev_hex = curr_hex;
 
-    if let Some(entity) = grid.entities.get(&*current) {
+    // Reset all to not bother with additional hash set that keeps highlighted hexes
+    for entity in grid.entities.values() {
         commands
             .entity(*entity)
             .insert(grid.default_material.clone());
-    };
+    }
 
-    *current = hex_pos;
-
-    if let Some(entity) = grid.entities.get(&*current) {
-        commands
-            .entity(*entity)
-            .insert(grid.selected_material.clone());
-    };
+    // Highlight field of movement using flood fill algorithm, adjusted to the MineSweeper game logic
+    let mut visited = HashSet::<Hex>::from([curr_hex]);
+    // todo: `with_mines` check will became redundant once this logic became 'on-click'
+    if curr_hex.ulength() <= GRID_RADIUS
+        && !grid.with_numbers.contains(&curr_hex)
+        && !grid.with_mines.contains(&curr_hex)
+    {
+        // this buffer stores the current line of expansion of the flood fill
+        let mut buffer = vec![curr_hex];
+        while !buffer.is_empty() {
+            buffer = buffer
+                .into_iter()
+                // take neighbors
+                .flat_map(|hex| hex.ring(1))
+                // Simplified version of check that this hex is within our map
+                .filter(|neighbor| neighbor.ulength() <= GRID_RADIUS)
+                // Contains+Insert in a single insert, which with the following check against
+                // `grid.with_numbers` implements the core game logic - we add adjusted numbers to the `visited`,
+                // but we expand only those neighbor who are not numbers
+                .filter(|neighbor| visited.insert(*neighbor))
+                // don't need to check against `with_mines` as mines are always surrounded by numbers
+                .filter(|neighbor| !grid.with_numbers.contains(neighbor))
+                .collect();
+        }
+    }
+    visited
+        .into_iter()
+        .filter_map(|hex| grid.entities.get(&hex))
+        .for_each(|entity| {
+            commands
+                .entity(*entity)
+                .insert(grid.selected_material.clone());
+        });
 }
 
 /// Compute a bevy mesh from the layout
