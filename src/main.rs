@@ -14,7 +14,14 @@ const GRID_RADIUS: u32 = 16;
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                // todo: derive from the `HEX_SIZE` and `GRID_RADIUS`
+                resolution: (916.0, 800.0).into(),
+                ..default()
+            }),
+            ..default()
+        }))
         .add_systems(PreStartup, load_sprites)
         .add_systems(Startup, setup)
         .add_systems(Update, handle_input)
