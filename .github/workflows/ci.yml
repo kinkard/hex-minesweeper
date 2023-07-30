@@ -16,7 +16,11 @@ jobs:
         uses: actions/cache@v3
         continue-on-error: false
         with:
-          path: target/
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
       - run: cargo clippy --all -- -D warnings
@@ -29,7 +33,11 @@ jobs:
         uses: actions/cache@v3
         continue-on-error: false
         with:
-          path: target/
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
       - run: cargo test --all
