@@ -18,7 +18,6 @@ fn main() {
         .add_systems(PreStartup, load_sprites)
         .add_systems(Startup, setup)
         .add_systems(Update, handle_input)
-        .add_systems(Update, bevy::window::close_on_esc)
         .run();
 }
 
