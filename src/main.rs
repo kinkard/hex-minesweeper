@@ -9,6 +9,17 @@ use hexx::{shapes, Hex, HexLayout, HexOrientation, PlaneMeshBuilder};
 const TEXTURE_SIZE: Vec2 = Vec2::splat(26.0);
 const HEX_SIZE: Vec2 = Vec2::splat(16.0);
 const GRID_RADIUS: u32 = 16;
+const GRID_LAYOUT: HexLayout = HexLayout {
+    orientation: HexOrientation::Pointy,
+    hex_size: HEX_SIZE,
+    origin: Vec2::ZERO,
+    invert_x: false,
+    invert_y: false,
+};
+
+fn is_hex_within_grid(hex: &Hex) -> bool {
+    hex.ulength() <= GRID_RADIUS
+}
 
 fn main() {
     App::new()
@@ -28,7 +39,6 @@ fn main() {
 
 #[derive(Resource)]
 struct HexGrid {
-    layout: HexLayout,
     entities: HashMap<Hex, Entity>,
 
     covered: HashSet<Hex>,
@@ -80,24 +90,18 @@ fn setup(
 ) {
     commands.spawn(Camera2dBundle::default());
 
-    let layout = HexLayout {
-        orientation: HexOrientation::Pointy,
-        hex_size: HEX_SIZE,
-        ..default()
-    };
-
     // materials
     let covered_material = materials.add(Color::DARK_GRAY.into());
     let uncovered_material = materials.add(Color::GRAY.into());
     let selected_material = materials.add(Color::WHITE.into());
 
     // mesh
-    let mesh = hexagonal_plane(&layout);
+    let mesh = hexagonal_plane(&GRID_LAYOUT);
     let mesh_handle = meshes.add(mesh);
 
     let entities: HashMap<_, _> = shapes::hexagon(Hex::ZERO, GRID_RADIUS)
         .map(|hex| {
-            let pos = layout.hex_to_world_pos(hex);
+            let pos = GRID_LAYOUT.hex_to_world_pos(hex);
             let id = commands
                 .spawn(ColorMesh2dBundle {
                     transform: Transform::from_xyz(pos.x, pos.y, 0.0).with_scale(Vec3::splat(0.9)),
@@ -138,14 +142,13 @@ fn setup(
         .into_iter()
         // we don't want to draw number over the mine
         .filter(|(hex, _number)| !mines.contains(hex))
-        .filter(|(hex, _number)| entities.contains_key(hex))
+        .filter(|(hex, _number)| is_hex_within_grid(hex))
         .collect();
 
     // all hexes are covered by default
     let covered = entities.keys().cloned().collect();
 
     commands.insert_resource(HexGrid {
-        layout,
         entities,
 
         covered,
@@ -178,7 +181,7 @@ fn handle_input(
         window.height() / 2.0 - cursor_pos.y,
     );
 
-    let curr_hex = grid.layout.world_pos_to_hex(cursor_pos);
+    let curr_hex = GRID_LAYOUT.world_pos_to_hex(cursor_pos);
 
     if buttons.just_pressed(MouseButton::Right) && grid.covered.contains(&curr_hex) {
         let entity = grid.entities[&curr_hex];
@@ -222,7 +225,7 @@ fn handle_input(
                         // take neighbors
                         .flat_map(|hex| hex.ring(1))
                         // Simplified version of check that this hex is within our map
-                        .filter(|neighbor| neighbor.ulength() <= GRID_RADIUS)
+                        .filter(is_hex_within_grid)
                         // Contains+Insert in a single insert, which with the following check against
                         // `grid.with_numbers` implements the core game logic - we add adjusted numbers to the `visited`,
                         // but we expand only those neighbor who are not numbers
