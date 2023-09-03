@@ -24,8 +24,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        continue-on-error: false
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-wasm32-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-wasm32-
       - run: rustup target add wasm32-unknown-unknown
       - run: cargo build --release --target wasm32-unknown-unknown
+      - run: cargo install wasm-bindgen-cli
       - run: wasm-bindgen --out-dir ./site/ --target web ./target/wasm32-unknown-unknown/release/hex-minesweeper.wasm
       - uses: actions/upload-pages-artifact@v1
         with:
