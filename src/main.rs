@@ -33,6 +33,8 @@ fn main() {
         }))
         .add_systems(PreStartup, load_sprites)
         .add_systems(Startup, setup)
+        .init_resource::<CursorPos>()
+        .add_systems(Update, update_cursor_pos)
         .add_systems(Update, handle_input)
         .run();
 }
@@ -162,26 +164,43 @@ fn setup(
     });
 }
 
+/// Current cursor position in within hex grid
+#[derive(Copy, Clone, Default, PartialEq, Resource)]
+struct CursorPos(Option<Hex>);
+
+fn update_cursor_pos(
+    windows: Query<&Window, With<PrimaryWindow>>,
+    mut cursor_pos: ResMut<CursorPos>,
+) {
+    let window = windows.single();
+    cursor_pos.0 = if let Some(cursor_pos) = window.cursor_position() {
+        // Transform from (0,0) in top right corner to the world coordinates with (0,0) in the center
+        let cursor_pos = Vec2::new(
+            cursor_pos.x - window.width() / 2.0,
+            window.height() / 2.0 - cursor_pos.y,
+        );
+        let hex = GRID_LAYOUT.world_pos_to_hex(cursor_pos);
+        if is_hex_within_grid(&hex) {
+            Some(hex)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+}
+
 fn handle_input(
     mut commands: Commands,
+    cursor_pos: Res<CursorPos>,
     buttons: Res<Input<MouseButton>>,
-    windows: Query<&Window, With<PrimaryWindow>>,
     mut prev_hex: Local<Hex>,
     mut grid: ResMut<HexGrid>,
     textures: Res<Sprites>,
 ) {
-    let window = windows.single();
-    let Some(cursor_pos) = window.cursor_position() else {
+    let Some(curr_hex) = cursor_pos.0 else {
         return;
     };
-
-    // Transform from (0,0) in top right corner to the world coordinates with (0,0) in the center
-    let cursor_pos = Vec2::new(
-        cursor_pos.x - window.width() / 2.0,
-        window.height() / 2.0 - cursor_pos.y,
-    );
-
-    let curr_hex = GRID_LAYOUT.world_pos_to_hex(cursor_pos);
 
     if buttons.just_pressed(MouseButton::Right) && grid.covered.contains(&curr_hex) {
         let entity = grid.entities[&curr_hex];
