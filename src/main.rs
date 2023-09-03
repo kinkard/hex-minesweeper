@@ -35,6 +35,7 @@ fn main() {
         .add_systems(Startup, setup)
         .init_resource::<CursorPos>()
         .add_systems(Update, update_cursor_pos)
+        .add_systems(Update, highlight_cursor_pos)
         .add_systems(Update, handle_input)
         .run();
 }
@@ -48,9 +49,7 @@ struct HexGrid {
     mines: HashSet<Hex>,
     flagged: HashSet<Hex>,
 
-    covered_material: Handle<ColorMaterial>,
     uncovered_material: Handle<ColorMaterial>,
-    selected_material: Handle<ColorMaterial>,
 }
 
 #[derive(Resource)]
@@ -68,7 +67,7 @@ fn load_sprites(mut commands: Commands, asset_server: Res<AssetServer>) {
             custom_size: Some(TEXTURE_SIZE),
             ..default()
         },
-        transform: Transform::from_xyz(0.0, 0.0, 1.0),
+        transform: Transform::from_xyz(0.0, 0.0, 2.0),
         ..default()
     };
 
@@ -93,9 +92,8 @@ fn setup(
     commands.spawn(Camera2dBundle::default());
 
     // materials
-    let covered_material = materials.add(Color::DARK_GRAY.into());
-    let uncovered_material = materials.add(Color::GRAY.into());
-    let selected_material = materials.add(Color::WHITE.into());
+    let covered_material = materials.add(Color::rgb(0.25, 0.25, 0.25).into());
+    let uncovered_material = materials.add(Color::rgb(0.6, 0.6, 0.6).into());
 
     // mesh
     let mesh = hexagonal_plane(&GRID_LAYOUT);
@@ -158,10 +156,20 @@ fn setup(
         mines,
         flagged: HashSet::new(),
 
-        covered_material,
         uncovered_material,
-        selected_material,
     });
+
+    // Use a separate entity to highlight hex under the cursor
+    commands
+        .spawn(ColorMesh2dBundle {
+            transform: Transform::from_scale(Vec3::splat(0.9)),
+            mesh: mesh_handle.into(),
+            material: materials.add(Color::WHITE.with_a(0.2).into()),
+            // default visibility is hidden
+            visibility: Visibility::Hidden,
+            ..default()
+        })
+        .insert(HighlightHex);
 }
 
 /// Current cursor position in within hex grid
@@ -190,11 +198,34 @@ fn update_cursor_pos(
     };
 }
 
+#[derive(Component)]
+struct HighlightHex;
+
+fn highlight_cursor_pos(
+    cursor_pos: Res<CursorPos>,
+    mut prev_pos: Local<CursorPos>,
+    mut highlight_hex: Query<(&mut Transform, &mut Visibility), With<HighlightHex>>,
+) {
+    if *prev_pos == *cursor_pos {
+        return;
+    }
+    *prev_pos = *cursor_pos;
+
+    for (mut transform, mut visibility) in highlight_hex.iter_mut() {
+        if let Some(cursor_pos) = cursor_pos.0 {
+            *visibility = Visibility::Visible;
+            let pos = GRID_LAYOUT.hex_to_world_pos(cursor_pos);
+            transform.translation = Vec3::new(pos.x, pos.y, 1.0);
+        } else {
+            *visibility = Visibility::Hidden;
+        }
+    }
+}
+
 fn handle_input(
     mut commands: Commands,
     cursor_pos: Res<CursorPos>,
     buttons: Res<Input<MouseButton>>,
-    mut prev_hex: Local<Hex>,
     mut grid: ResMut<HexGrid>,
     textures: Res<Sprites>,
 ) {
@@ -222,6 +253,9 @@ fn handle_input(
     if buttons.just_pressed(MouseButton::Left) && !grid.flagged.contains(&curr_hex) {
         if grid.covered.contains(&curr_hex) {
             let entity = grid.entities.get(&curr_hex).unwrap();
+            commands
+                .entity(*entity)
+                .insert(grid.uncovered_material.clone());
 
             if grid.mines.contains(&curr_hex) {
                 // todo: explode!
@@ -273,30 +307,6 @@ fn handle_input(
             }
             grid.covered.remove(&curr_hex);
         }
-    }
-
-    // Do nothing if selected hex didn't change
-    if curr_hex == *prev_hex {
-        return;
-    }
-
-    // Remove highlighting from the prev_hex
-    if let Some(entity) = grid.entities.get(&*prev_hex) {
-        let material = if grid.covered.contains(&*prev_hex) {
-            grid.covered_material.clone()
-        } else {
-            grid.uncovered_material.clone()
-        };
-        commands.entity(*entity).insert(material);
-    }
-
-    *prev_hex = curr_hex;
-
-    // Highlight current hex
-    if let Some(entity) = grid.entities.get(&curr_hex) {
-        commands
-            .entity(*entity)
-            .insert(grid.selected_material.clone());
     }
 }
 
