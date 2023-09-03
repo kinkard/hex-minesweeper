@@ -250,63 +250,64 @@ fn handle_input(
     }
 
     // Core minesweeper logic
-    if buttons.just_pressed(MouseButton::Left) && !grid.flagged.contains(&curr_hex) {
-        if grid.covered.contains(&curr_hex) {
-            let entity = grid.entities.get(&curr_hex).unwrap();
-            commands
-                .entity(*entity)
-                .insert(grid.uncovered_material.clone());
+    if buttons.just_pressed(MouseButton::Left)
+        && !grid.flagged.contains(&curr_hex)
+        && grid.covered.contains(&curr_hex)
+    {
+        let entity = grid.entities.get(&curr_hex).unwrap();
+        commands
+            .entity(*entity)
+            .insert(grid.uncovered_material.clone());
 
-            if grid.mines.contains(&curr_hex) {
-                // todo: explode!
-                commands.entity(*entity).with_children(|parent| {
-                    parent.spawn(textures.mine.clone());
-                });
-            } else if let Some(number) = grid.numbers.get(&curr_hex) {
-                commands.entity(*entity).with_children(|parent| {
-                    parent.spawn(textures.numbers[*number as usize].clone());
-                });
-            } else {
-                // Flood fill algorithm, adjusted to the MineSweeper game logic
-                let mut visited = HashSet::<Hex>::from([curr_hex]);
+        if grid.mines.contains(&curr_hex) {
+            // todo: explode!
+            commands.entity(*entity).with_children(|parent| {
+                parent.spawn(textures.mine.clone());
+            });
+        } else if let Some(number) = grid.numbers.get(&curr_hex) {
+            commands.entity(*entity).with_children(|parent| {
+                parent.spawn(textures.numbers[*number as usize].clone());
+            });
+        } else {
+            // Flood fill algorithm, adjusted to the MineSweeper game logic
+            let mut visited = HashSet::<Hex>::from([curr_hex]);
 
-                // this buffer stores the current line of expansion of the flood fill
-                let mut buffer = vec![curr_hex];
-                while !buffer.is_empty() {
-                    buffer = buffer
-                        .into_iter()
-                        // take neighbors
-                        .flat_map(|hex| hex.ring(1))
-                        // Simplified version of check that this hex is within our map
-                        .filter(is_hex_within_grid)
-                        // Contains+Insert in a single insert, which with the following check against
-                        // `grid.with_numbers` implements the core game logic - we add adjusted numbers to the `visited`,
-                        // but we expand only those neighbor who are not numbers
-                        .filter(|neighbor| visited.insert(*neighbor))
-                        // don't need to check against `with_mines` as mines are always surrounded by numbers
-                        // so we just stop exporation on numbers
-                        .filter(|neighbor| !grid.numbers.contains_key(neighbor))
-                        .collect();
-                }
+            // this buffer stores the current line of expansion of the flood fill
+            let mut buffer = vec![curr_hex];
+            while !buffer.is_empty() {
+                buffer = buffer
+                    .into_iter()
+                    // take neighbors
+                    .flat_map(|hex| hex.ring(1))
+                    // Simplified version of check that this hex is within our map
+                    .filter(is_hex_within_grid)
+                    // Contains+Insert in a single insert, which with the following check against
+                    // `grid.with_numbers` implements the core game logic - we add adjusted numbers to the `visited`,
+                    // but we expand only those neighbor who are not numbers
+                    .filter(|neighbor| visited.insert(*neighbor))
+                    // don't need to check against `with_mines` as mines are always surrounded by numbers
+                    // so we just stop exporation on numbers
+                    .filter(|neighbor| !grid.numbers.contains_key(neighbor))
+                    .collect();
+            }
 
-                for hex in visited {
-                    if !grid.flagged.contains(&hex) {
-                        grid.covered.remove(&hex);
+            for hex in visited {
+                if !grid.flagged.contains(&hex) {
+                    grid.covered.remove(&hex);
+                    commands
+                        .entity(grid.entities[&hex])
+                        .insert(grid.uncovered_material.clone());
+                    if let Some(number) = grid.numbers.get(&hex) {
                         commands
                             .entity(grid.entities[&hex])
-                            .insert(grid.uncovered_material.clone());
-                        if let Some(number) = grid.numbers.get(&hex) {
-                            commands
-                                .entity(grid.entities[&hex])
-                                .with_children(|parent| {
-                                    parent.spawn(textures.numbers[*number as usize].clone());
-                                });
-                        }
+                            .with_children(|parent| {
+                                parent.spawn(textures.numbers[*number as usize].clone());
+                            });
                     }
                 }
             }
-            grid.covered.remove(&curr_hex);
         }
+        grid.covered.remove(&curr_hex);
     }
 }
 
